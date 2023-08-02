@@ -1,0 +1,70 @@
+- name: Deploy the common setup
+  hosts: k8s
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Get the architecture using dpkg
+      command: dpkg --print-architecture
+      register: architecture_result
+      changed_when: false
+    - name: Set architecture as a fact
+      set_fact:
+        system_architecture: "{{ architecture_result.stdout | trim }}"
+  roles:
+    - common
+    - k8s
+
+- name: Check the kubelet.conf to determine if it has been built
+  hosts: k8s
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check if kubelet.conf exists
+      stat:
+        path: "/etc/kubernetes/kubelet.conf"
+        get_attributes: no
+        get_checksum: no
+        get_mime: no
+      register: kubelet_conf_stat
+    - name: Set fact kubelet_conf
+      set_fact:
+        kubelet_conf: "{{ kubelet_conf_stat }}"
+
+- name: Obtain the certificate-key
+  hosts: k8s
+  become: true
+  gather_facts: false
+  tasks:
+    - block:
+      - name: Update certs for regenerate certificate-key
+        command: "kubeadm init phase upload-certs --upload-certs"
+        register: kubeadm_upload_cert
+      - name: Set fact kubeadm_certificate_key
+        set_fact:
+          kubeadm_certificate_key: "{{ kubeadm_upload_cert.stdout_lines[-1] | regex_replace('^\\[upload-certs\\] ', '') | trim }}"
+      - name: Generate token
+        command: "kubeadm token create --print-join-command"
+        register: kubeadm_print_join_command
+      - name: Set fact kubeadm_join_cmd
+        set_fact:
+          kubeadm_join_cmd: "{{ kubeadm_print_join_command.stdout_lines[-1] }}"
+      run_once: true
+      delegate_to: "{{ groups['master'][0] }}"
+
+- name: Join the master node to the kubernetes cluster
+  hosts: master
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Join the cluster with kubeadm
+      command: "{{ kubeadm_join_cmd }} --control-plane --certificate-key {{ kubeadm_certificate_key }}"
+      when: not kubelet_conf.stat.exists
+
+- name: Join the worker node to the kubernetes cluster
+  hosts: worker
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Join the cluster with kubeadm
+      command: "{{ kubeadm_join_cmd }}"
+      when: not kubelet_conf.stat.exists

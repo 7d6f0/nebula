@@ -1,0 +1,20 @@
+version:
+  kubeadm: 1.27.4-00
+  kubelet: 1.27.4-00
+  kubectl: 1.27.4-00
+  containerd: 1.6.21-1
+  runc: v1.1.8
+  cni: v1.3.0
+kernel_modules:
+  - overlay
+  - br_netfilter
+sysctl:
+  "net.bridge.bridge-nf-call-iptables": 1
+  "net.bridge.bridge-nf-call-ip6tables": 1
+  "net.ipv4.ip_forward": 1
+packages:
+  - ca-certificates
+  - curl
+  - gnupg
+pod_network_cidr: "10.244.0.0/16"
+control_plane_endpoint: "k8s-master-vip-fcac92d9c40189b5.elb.us-west-2.amazonaws.com:6443"

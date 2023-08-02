@@ -1,0 +1,50 @@
+- name: Deploy the common setup
+  hosts: master
+  become: true
+  gather_facts: true
+  pre_tasks:
+    - name: Get the architecture using dpkg
+      command: dpkg --print-architecture
+      register: architecture_result
+      changed_when: false
+    - name: Set architecture as a fact
+      set_fact:
+        system_architecture: "{{ architecture_result.stdout | trim }}"
+  roles:
+    - common
+    - k8s
+
+- name: Check the kubelet.conf to determine if it has been built
+  hosts: master
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Check if kubelet.conf exists
+      stat:
+        path: "/etc/kubernetes/kubelet.conf"
+        get_attributes: no
+        get_checksum: no
+        get_mime: no
+      register: kubelet_conf_stat
+    - name: Set fact kubelet_conf
+      set_fact:
+        kubelet_conf: "{{ kubelet_conf_stat }}"
+
+- name: Build a Kubernetes cluster using kubeadm
+  hosts: master
+  become: true
+  gather_facts: false
+  tasks:
+      - block:
+        - name: Initialize kubeadm
+          command: "kubeadm init --pod-network-cidr={{ pod_network_cidr }} --control-plane-endpoint {{ control_plane_endpoint }} --upload-certs"
+          # Retry is because sometimes the control-plane-endpoint vip doesn't pass the health check within the time limit.
+          # If it doesn't work, try adjusting the health check settings.
+          retries: 3
+          register: kubeadm_init
+          until: kubeadm_init is succeeded
+          failed_when: kubeadm_init.rc != 0
+        rescue:
+          - name: Reset kubeadm when failed init
+            command: "kubeadm reset --force"
+        when: not kubelet_conf.stat.exists

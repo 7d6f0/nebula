@@ -1,0 +1,135 @@
+- name: Add Docker GPG key
+  apt_key:
+    url: https://download.docker.com/linux/ubuntu/gpg
+
+- name: Add Docker repository
+  apt_repository:
+    repo: "deb [arch={{ system_architecture }}] https://download.docker.com/{{ ansible_system | lower }}/{{ ansible_distribution | lower }} {{ ansible_distribution_release | lower }} stable"
+    state: present
+
+- name: Unhold containerd
+  dpkg_selections:
+    name: containerd.io
+    selection: install
+
+- name: Install containerd
+  apt:
+    name: "containerd.io={{ version.containerd }}"
+    state: present
+
+- name: Hold version of containerd
+  dpkg_selections:
+    name: containerd.io
+    selection: hold
+
+- name: Enable and start containerd service
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+
+# - name: Download containerd
+#   get_url:
+#     url: "https://github.com/containerd/containerd/releases/download/v{{ version.containerd }}/containerd-{{ version.containerd }}-{{ ansible_system | lower }}-{{ system_architecture }}.tar.gz"
+#     dest: "/tmp/containerd-{{ version.containerd }}-{{ ansible_system | lower }}-{{ system_architecture }}.tar.gz"
+#     mode: "0440"
+# 
+# - name: Extract containerd
+#   unarchive:
+#     src: "/tmp/containerd-{{ version.containerd }}-{{ ansible_system | lower }}-{{ system_architecture }}.tar.gz"
+#     dest: "/tmp"
+#     remote_src: true
+#     mode: "0755"
+# 
+# - name: Copy the containerd to /usr/local/bin
+#   copy:
+#     src: "/tmp/bin/{{ item }}"
+#     dest: "/usr/local/bin/{{ item }}"
+#     remote_src: true
+#     owner: root
+#     group: root
+#     mode: '0755'
+#   loop:
+#     - containerd
+#     - ctr
+# 
+# - name: Ensure the local systemd directory exists
+#   file:
+#     path: "/usr/local/lib/systemd/system/"
+#     state: directory
+#     owner: root
+#     group: root
+#     mode: "0755"
+# 
+# - name: Download containerd.service
+#   get_url:
+#     url: "https://raw.githubusercontent.com/containerd/containerd/release/{{ version.containerd.split('.')[:2] | join('.') }}/containerd.service"
+#     dest: "/usr/local/lib/systemd/system/containerd.service"
+#     mode: "0664"
+# 
+# - name: Ensure the containerd config directory exists
+#   file:
+#     path: "/etc/containerd"
+#     state: directory
+#     owner: root
+#     group: root
+#     mode: "0755"
+# 
+- name: Copy the config.toml
+  copy:
+    src: config.toml
+    dest: /etc/containerd/config.toml
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart containerd
+# 
+# - name: Reload systemd
+#   systemd:
+#     daemon_reload: yes
+# 
+# - name: Start and enable containerd service
+#   systemd:
+#     name: containerd
+#     state: started
+#     enabled: yes
+# 
+# - name: Ensure the local sbin directory exists
+#   file:
+#     path: "/usr/local/sbin/"
+#     state: directory
+#     owner: root
+#     group: root
+#     mode: "0755"
+# 
+# - name: Download runc
+#   get_url:
+#     url: "https://github.com/opencontainers/runc/releases/download/{{ version.runc }}/runc.{{ system_architecture }}"
+#     dest: "/usr/local/runc"
+#     owner: root
+#     group: root
+#     mode: "0755"
+# 
+#
+- name: Download CNI plugins
+  get_url:
+    url: "https://github.com/containernetworking/plugins/releases/download/{{ version.cni }}/cni-plugins-{{ ansible_system | lower }}-{{ system_architecture }}-{{ version.cni }}.tgz"
+    dest: "/tmp"
+    mode: "0440"
+
+- name: Ensure the cni bin directory exists
+  file:
+    path: "/opt/cni/bin"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Extract CNI plugins
+  unarchive:
+    src: "/tmp/cni-plugins-{{ ansible_system | lower }}-{{ system_architecture }}-{{ version.cni }}.tgz"
+    dest: "/opt/cni/bin"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0755"

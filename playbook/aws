@@ -1,0 +1,11 @@
+[master]
+master01-k8s.nebula.aws
+master02-k8s.nebula.aws
+
+[worker]
+worker01-k8s.nebula.aws
+worker02-k8s.nebula.aws
+
+[k8s:children]
+master
+worker

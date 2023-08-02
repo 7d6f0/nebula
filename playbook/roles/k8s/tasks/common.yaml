@@ -1,0 +1,65 @@
+- name: Remove swapfile from /etc/fstab
+  mount:
+    name: "{{ item }}"
+    fstype: swap
+    state: absent
+  with_items:
+    - swap
+    - none
+
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Load require kernel modules
+  modprobe:
+    name: "{{ item }}"
+  loop: "{{ kernel_modules }}"
+
+- name: Change sysctl params
+  sysctl:
+    sysctl_file: /etc/sysctl.d/k8s.conf
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+  loop: "{{ sysctl | dict2items }}"
+
+- name: Install required packages
+  package:
+    name: "{{ packages }}"
+    state: present
+
+- name: Add an apt signing key for Kubernetes
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+
+- name: Adding apt repository for Kubernetes
+  apt_repository:
+    repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
+    state: present
+    filename: kubernetes.list
+
+- name: Set a shared loop variable
+  set_fact:
+    kubernetes_binaries:
+      - kubelet
+      - kubeadm
+      - kubectl
+
+- name: Unhold kubelet, kubeadm and kubectl
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: install
+  loop: "{{ kubernetes_binaries }}"
+
+- name: Install kubelet, kubeadm and kubectl
+  apt:
+    name: "{{ item }}={{ version[item] }}"
+    state: present
+  loop: "{{ kubernetes_binaries }}"
+
+- name: Hold version of kubelet, kubeadm and kubectl
+  dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ kubernetes_binaries }}"
